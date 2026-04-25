@@ -3,6 +3,7 @@ using PaymentRoutingEngine.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json;
 
 namespace PaymentRoutingEngine.Infrastructure.Providers.MockProvider
 {
@@ -14,22 +15,38 @@ namespace PaymentRoutingEngine.Infrastructure.Providers.MockProvider
             ProviderPaymentRequest request,
             CancellationToken cancellationToken = default)
         {
-            var isSuccessful = request.AmountMinor <= 500_000;
+            var random = Random.Shared.Next(0, 100);
+
+            if (random < 70)
+            {
+                return Task.FromResult(new ProviderPaymentResponse
+                {
+                    IsSuccessful = true,
+                    ProviderReference = $"MOCK-{Guid.NewGuid():N}",
+                    ProviderStatusCode = "00",
+                    FailureCategory = FailureCategory.None,
+                    RawResponsePayload = JsonSerializer.Serialize(new
+                    {
+                        reference = request.Reference,
+                        status = "success",
+                        providerStatusCode = "00"
+                    })
+                });
+            }
 
             return Task.FromResult(new ProviderPaymentResponse
             {
-                IsSuccessful = isSuccessful,
-                ProviderReference = Guid.NewGuid().ToString("N"),
-                ProviderStatusCode = isSuccessful ? "00" : "96",
-                FailureCategory = isSuccessful ? null : FailureCategory.ProviderTransient,
-                FailureReason = isSuccessful ? null : "Simulated transient provider failure.",
-                RawResponsePayload = $$"""
-            {
-              "reference": "{{request.Reference}}",
-              "status": "{{(isSuccessful ? "success" : "failed")}}",
-              "providerStatusCode": "{{(isSuccessful ? "00" : "96")}}"
-            }
-            """
+                IsSuccessful = false,
+                ProviderReference = null,
+                ProviderStatusCode = "96",
+                FailureCategory = FailureCategory.ProviderTransient,
+                FailureReason = "Mock provider transient failure.",
+                RawResponsePayload = JsonSerializer.Serialize(new
+                {
+                    reference = request.Reference,
+                    status = "failed",
+                    providerStatusCode = "96"
+                })
             });
         }
     }

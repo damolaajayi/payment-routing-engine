@@ -2,11 +2,17 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentRoutingEngine.Application.Abstractions.Common;
+using PaymentRoutingEngine.Application.Abstractions.Messaging;
 using PaymentRoutingEngine.Application.Abstractions.Persistence;
 using PaymentRoutingEngine.Application.Abstractions.Providers;
+using PaymentRoutingEngine.Application.Behaviors;
+using PaymentRoutingEngine.Infrastructure.Messaging;
+using PaymentRoutingEngine.Infrastructure.Messaging.Behaviors;
 using PaymentRoutingEngine.Infrastructure.Persistence;
 using PaymentRoutingEngine.Infrastructure.Persistence.Repositories;
+using PaymentRoutingEngine.Infrastructure.Providers;
 using PaymentRoutingEngine.Infrastructure.Providers.MockProvider;
+using PaymentRoutingEngine.Infrastructure.Providers.Paystack;
 using PaymentRoutingEngine.Infrastructure.Time;
 using System;
 using System.Collections.Generic;
@@ -28,11 +34,21 @@ namespace PaymentRoutingEngine.Infrastructure.DependencyInjection
                 options.UseNpgsql(connectionString);
             });
 
+            services.AddHttpClient<PaystackProviderClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.paystack.co/");
+            });
+
             services.AddScoped<IPaymentTransactionRepository, PaymentTransactionRepository>();
             services.AddScoped<IPaymentAttemptRepository, PaymentAttemptRepository>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IDateTimeProvider, SystemDateTimeProvider>();
+            services.AddScoped<IPaymentProviderClient, PaystackProviderClient>();
             services.AddScoped<IPaymentProviderClient, MockProviderClient>();
+            services.AddScoped<IPaymentProviderResolver, PaymentProviderResolver>();
+            services.AddScoped<IDispatcher, Dispatcher>();
+            services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+            services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 
             return services;
         }
