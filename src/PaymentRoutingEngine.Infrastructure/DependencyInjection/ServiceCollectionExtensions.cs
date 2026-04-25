@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentRoutingEngine.Application.Abstractions.Common;
 using PaymentRoutingEngine.Application.Abstractions.Messaging;
+using PaymentRoutingEngine.Application.Abstractions.Payments;
 using PaymentRoutingEngine.Application.Abstractions.Persistence;
 using PaymentRoutingEngine.Application.Abstractions.Providers;
 using PaymentRoutingEngine.Application.Behaviors;
@@ -45,6 +46,8 @@ namespace PaymentRoutingEngine.Infrastructure.DependencyInjection
             services.AddScoped<IDateTimeProvider, SystemDateTimeProvider>();
             services.AddScoped<IPaymentProviderClient, PaystackProviderClient>();
             services.AddScoped<IPaymentProviderClient, MockProviderClient>();
+            services.AddScoped<IPaymentProviderRoutingService, PaymentProviderRoutingService>();
+            services.AddScoped<IPaymentRetryPolicy, PaymentRetryPolicy>();
             services.AddScoped<IPaymentProviderResolver, PaymentProviderResolver>();
             services.AddScoped<IDispatcher, Dispatcher>();
             services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
