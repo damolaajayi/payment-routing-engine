@@ -11,5 +11,7 @@ namespace PaymentRoutingEngine.Application.Abstractions.Persistence
         Task<PaymentTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
         Task<PaymentTransaction?> GetByReferenceAsync(string reference, CancellationToken cancellationToken = default);
         Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default);
+
+        //Task<PaymentTransaction?> GetByReferenceAsync(string reference, CancellationToken cancellationToken);
     }
 }

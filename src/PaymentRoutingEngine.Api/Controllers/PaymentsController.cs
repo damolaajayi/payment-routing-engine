@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PaymentRoutingEngine.Api.Contracts.Requests;
 using PaymentRoutingEngine.Api.Contracts.Responses;
 using PaymentRoutingEngine.Application.Abstractions.Messaging;
@@ -20,6 +21,7 @@ namespace PaymentRoutingEngine.Api.Controllers
         }
 
         [HttpPost]
+        [EnableRateLimiting("CreatePaymentPolicy")]
         [ProducesResponseType(typeof(CreatePaymentResponse), StatusCodes.Status201Created)]
         public async Task<IActionResult> CreatePayment([FromBody] CreatePaymentRequest request, CancellationToken cancellationToken)
         {
@@ -37,6 +39,7 @@ namespace PaymentRoutingEngine.Api.Controllers
         }
 
         [HttpPost("{transactionId:guid}/process")]
+        [EnableRateLimiting("ProcessPaymentPolicy")]
         public async Task<IActionResult> ProcessPayment(Guid transactionId, CancellationToken cancellationToken)
         {
             var result = await _dispatcher.Send(new ProcessPaymentCommand(transactionId), cancellationToken);
