@@ -1,6 +1,9 @@
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using PaymentRoutingEngine.Api.Middlewares;
 using PaymentRoutingEngine.Application.DependencyInjection;
 using PaymentRoutingEngine.Infrastructure.DependencyInjection;
+using Serilog;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -61,6 +64,37 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
     };
 });
+builder.Host.UseSerilog((context, loggerConfiguration) =>
+{
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .Enrich.WithCorrelationId()
+        .WriteTo.Console();
+});
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource =>
+    {
+        resource.AddService(
+            serviceName: "payment-routing-engine",
+            serviceVersion: "1.0.0");
+    })
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation()
+            .AddConsoleExporter();
+    });
 var app = builder.Build();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();

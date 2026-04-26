@@ -2,9 +2,10 @@
 using PaymentRoutingEngine.Application.Abstractions.Messaging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
-namespace PaymentRoutingEngine.Application.Behaviors
+namespace PaymentRoutingEngine.Infrastructure.Messaging.Behaviors
 {
     public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
@@ -22,14 +23,35 @@ namespace PaymentRoutingEngine.Application.Behaviors
             Func<Task<TResponse>> next)
         {
             var requestName = typeof(TRequest).Name;
+            var stopwatch = Stopwatch.StartNew();
 
             _logger.LogInformation("Handling request {RequestName}", requestName);
 
-            var response = await next();
+            try
+            {
+                var response = await next();
 
-            _logger.LogInformation("Handled request {RequestName}", requestName);
+                stopwatch.Stop();
 
-            return response;
+                _logger.LogInformation(
+                    "Handled request {RequestName} in {ElapsedMilliseconds}ms",
+                    requestName,
+                    stopwatch.ElapsedMilliseconds);
+
+                return response;
+            }
+            catch (Exception exception)
+            {
+                stopwatch.Stop();
+
+                _logger.LogError(
+                    exception,
+                    "Request {RequestName} failed after {ElapsedMilliseconds}ms",
+                    requestName,
+                    stopwatch.ElapsedMilliseconds);
+
+                throw;
+            }
         }
     }
 }
