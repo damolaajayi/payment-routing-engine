@@ -6,6 +6,7 @@ using PaymentRoutingEngine.Application.Abstractions.Messaging;
 using PaymentRoutingEngine.Application.Payments.CreatePayment;
 using PaymentRoutingEngine.Application.Payments.GetPaymentById;
 using PaymentRoutingEngine.Application.Payments.ProcessPayment;
+using PaymentRoutingEngine.Infrastructure.Messaging;
 
 namespace PaymentRoutingEngine.Api.Controllers
 {
@@ -14,10 +15,12 @@ namespace PaymentRoutingEngine.Api.Controllers
     public sealed class PaymentsController : ControllerBase
     {
         private readonly IDispatcher _dispatcher;
+        private readonly IPaymentProcessingQueue _paymentProcessingQueue;
 
-        public PaymentsController(IDispatcher dispatcher)
+        public PaymentsController(IDispatcher dispatcher, IPaymentProcessingQueue paymentProcessingQueue)
         {
             _dispatcher = dispatcher;
+            _paymentProcessingQueue = paymentProcessingQueue;
         }
 
         [HttpPost]
@@ -42,13 +45,14 @@ namespace PaymentRoutingEngine.Api.Controllers
         [EnableRateLimiting("ProcessPaymentPolicy")]
         public async Task<IActionResult> ProcessPayment(Guid transactionId, CancellationToken cancellationToken)
         {
-            var result = await _dispatcher.Send(new ProcessPaymentCommand(transactionId), cancellationToken);
-            return Ok(new
+            await _paymentProcessingQueue.EnqueueAsync(transactionId, cancellationToken);
+
+            return Accepted(new
             {
-                result.TransactionId,
-                Status = result.Status.ToString(),
-                result.FailureReason
+                transactionId,
+                status = "Queued"
             });
+            
         }
 
     }

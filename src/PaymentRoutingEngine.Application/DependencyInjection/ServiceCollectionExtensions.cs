@@ -3,10 +3,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentRoutingEngine.Application.Abstractions.Common;
 using PaymentRoutingEngine.Application.Abstractions.Messaging;
-using PaymentRoutingEngine.Application.Abstractions.Payments;
-using PaymentRoutingEngine.Application.Abstractions.Persistence;
-using PaymentRoutingEngine.Application.Abstractions.Providers;
-using PaymentRoutingEngine.Application.Behaviors;
 using PaymentRoutingEngine.Application.Payments.CreatePayment;
 using PaymentRoutingEngine.Application.Payments.GetPaymentById;
 using PaymentRoutingEngine.Application.Payments.ProcessPayment;
@@ -28,8 +24,6 @@ namespace PaymentRoutingEngine.Application.DependencyInjection
                 IRequestHandler<GetPaymentByIdQuery, GetPaymentByIdResult>,
                 GetPaymentByIdQueryHandler>();
             services.AddScoped<IRequestHandler<ProcessPaymentCommand, ProcessPaymentResult>, ProcessPaymentCommandHandler>();
-
-            services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 
             return services;
         }

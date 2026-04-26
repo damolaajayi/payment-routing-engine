@@ -6,7 +6,6 @@ using PaymentRoutingEngine.Application.Abstractions.Messaging;
 using PaymentRoutingEngine.Application.Abstractions.Payments;
 using PaymentRoutingEngine.Application.Abstractions.Persistence;
 using PaymentRoutingEngine.Application.Abstractions.Providers;
-using PaymentRoutingEngine.Application.Behaviors;
 using PaymentRoutingEngine.Infrastructure.Messaging;
 using PaymentRoutingEngine.Infrastructure.Messaging.Behaviors;
 using PaymentRoutingEngine.Infrastructure.Persistence;
@@ -52,6 +51,10 @@ namespace PaymentRoutingEngine.Infrastructure.DependencyInjection
             services.AddScoped<IDispatcher, Dispatcher>();
             services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
             services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+            services.Configure<RabbitMqOptions>(configuration.GetSection("RabbitMQ"));
+
+            services.AddSingleton<RabbitMqConnectionProvider>();
+            services.AddScoped<IPaymentProcessingQueue, RabbitMqPaymentProcessingQueue>();
 
             return services;
         }
