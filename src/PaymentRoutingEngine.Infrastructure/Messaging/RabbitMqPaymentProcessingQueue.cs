@@ -12,6 +12,8 @@ namespace PaymentRoutingEngine.Infrastructure.Messaging
 {
     public sealed class RabbitMqPaymentProcessingQueue : IPaymentProcessingQueue
     {
+        private const string RetryCountHeader = "x-retry-count";
+
         private readonly RabbitMqConnectionProvider _connectionProvider;
         private readonly RabbitMqOptions _options;
         private readonly ILogger<RabbitMqPaymentProcessingQueue> _logger;
