@@ -14,6 +14,7 @@ namespace PaymentRoutingEngine.Workers.Consumers
 {
     public sealed class ProcessPaymentConsumer : BackgroundService
     {
+        private const string RetryCountHeader = "x-retry-count";
         private readonly IServiceProvider _serviceProvider;
         private readonly RabbitMqConnectionProvider _connectionProvider;
         private readonly RabbitMqOptions _options;
@@ -40,13 +41,8 @@ namespace PaymentRoutingEngine.Workers.Consumers
             _channel = await connection.CreateChannelAsync(
                 cancellationToken: stoppingToken);
 
-            await _channel.QueueDeclareAsync(
-                queue: _options.ProcessPaymentQueue,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: stoppingToken);
+
+            await DeclareQueuesAsync(_channel, stoppingToken);
 
             await _channel.BasicQosAsync(
                 prefetchSize: 0,
@@ -68,20 +64,22 @@ namespace PaymentRoutingEngine.Workers.Consumers
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation(
-                "Process payment consumer started. Queue: {Queue}",
-                _options.ProcessPaymentQueue);
+            "Process payment consumer started. Queue: {Queue}, DLQ: {DeadLetterQueue}",
+            _options.ProcessPaymentQueue,
+            _options.ProcessPaymentDeadLetterQueue);
         }
 
         private async Task HandleMessageAsync(
             BasicDeliverEventArgs eventArgs,
             CancellationToken cancellationToken)
         {
+
+            var body = eventArgs.Body.ToArray();
+            var json = Encoding.UTF8.GetString(body);
+            ProcessPaymentMessage? message = null;
             try
             {
-                var body = eventArgs.Body.ToArray();
-                var json = Encoding.UTF8.GetString(body);
-
-                var message = JsonSerializer.Deserialize<ProcessPaymentMessage>(json);
+                message = JsonSerializer.Deserialize<ProcessPaymentMessage>(json);
 
                 if (message is null)
                 {
@@ -105,21 +103,163 @@ namespace PaymentRoutingEngine.Workers.Consumers
                     deliveryTag: eventArgs.DeliveryTag,
                     multiple: false,
                     cancellationToken: cancellationToken);
+
+                _logger.LogInformation(
+                "Payment processing message acknowledged. TransactionId: {TransactionId}, DeliveryTag: {DeliveryTag}",
+                message.TransactionId,
+                eventArgs.DeliveryTag);
             }
             catch (Exception exception)
             {
+                var retryCount = GetRetryCount(eventArgs);
+
                 _logger.LogError(
                     exception,
-                    "Failed to process payment message. DeliveryTag: {DeliveryTag}",
+                    "Failed to process payment message. TransactionId: {TransactionId}, RetryCount: {RetryCount}, DeliveryTag: {DeliveryTag}",
+                    message?.TransactionId,
+                    retryCount,
                     eventArgs.DeliveryTag);
 
-                await _channel!.BasicNackAsync(
-                    deliveryTag: eventArgs.DeliveryTag,
-                    multiple: false,
-                    requeue: true,
-                    cancellationToken: cancellationToken);
+                if (retryCount >= _options.MaxProcessingRetries)
+                {
+                    await MoveToDeadLetterQueueAsync(
+                        eventArgs,
+                        body,
+                        reason: exception.Message,
+                        cancellationToken);
+
+                    return;
+                }
+
+                await RetryMessageAsync(
+                    eventArgs,
+                    body,
+                    retryCount + 1,
+                    cancellationToken);
             }
         }
+
+        private async Task RetryMessageAsync(
+        BasicDeliverEventArgs eventArgs,
+        byte[] body,
+        int nextRetryCount,
+        CancellationToken cancellationToken)
+        {
+            var properties = new BasicProperties
+            {
+                Persistent = true,
+                ContentType = "application/json",
+                MessageId = eventArgs.BasicProperties?.MessageId ?? Guid.NewGuid().ToString("N"),
+                CorrelationId = eventArgs.BasicProperties?.CorrelationId,
+                Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
+                Headers = new Dictionary<string, object?>
+                {
+                    [RetryCountHeader] = nextRetryCount
+                }
+            };
+
+            await _channel!.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: _options.ProcessPaymentQueue,
+                mandatory: true,
+                basicProperties: properties,
+                body: body,
+                cancellationToken: cancellationToken);
+
+            await _channel.BasicAckAsync(
+                deliveryTag: eventArgs.DeliveryTag,
+                multiple: false,
+                cancellationToken: cancellationToken);
+
+            _logger.LogWarning(
+                "Payment processing message requeued. RetryCount: {RetryCount}, DeliveryTag: {DeliveryTag}",
+                nextRetryCount,
+                eventArgs.DeliveryTag);
+        }
+
+        private async Task MoveToDeadLetterQueueAsync(
+        BasicDeliverEventArgs eventArgs,
+        byte[] body,
+        string reason,
+        CancellationToken cancellationToken)
+        {
+            var retryCount = GetRetryCount(eventArgs);
+
+            var properties = new BasicProperties
+            {
+                Persistent = true,
+                ContentType = "application/json",
+                MessageId = eventArgs.BasicProperties?.MessageId ?? Guid.NewGuid().ToString("N"),
+                CorrelationId = eventArgs.BasicProperties?.CorrelationId,
+                Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
+                Headers = new Dictionary<string, object?>
+                {
+                    [RetryCountHeader] = retryCount,
+                    ["x-dead-letter-reason"] = reason,
+                    ["x-dead-lettered-at"] = DateTimeOffset.UtcNow.ToString("O")
+                }
+            };
+
+            await _channel!.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: _options.ProcessPaymentDeadLetterQueue,
+                mandatory: true,
+                basicProperties: properties,
+                body: body,
+                cancellationToken: cancellationToken);
+
+            await _channel.BasicAckAsync(
+                deliveryTag: eventArgs.DeliveryTag,
+                multiple: false,
+                cancellationToken: cancellationToken);
+
+            _logger.LogError(
+                "Payment processing message moved to DLQ. RetryCount: {RetryCount}, Reason: {Reason}, DeliveryTag: {DeliveryTag}",
+                retryCount,
+                reason,
+                eventArgs.DeliveryTag);
+        }
+
+        private static int GetRetryCount(BasicDeliverEventArgs eventArgs)
+        {
+            if (eventArgs.BasicProperties?.Headers is null)
+                return 0;
+
+            if (!eventArgs.BasicProperties.Headers.TryGetValue(RetryCountHeader, out var value))
+                return 0;
+
+            return value switch
+            {
+                int intValue => intValue,
+                long longValue => (int)longValue,
+                byte byteValue => byteValue,
+                short shortValue => shortValue,
+                byte[] bytes when int.TryParse(Encoding.UTF8.GetString(bytes), out var parsed) => parsed,
+                _ => 0
+            };
+        }
+
+        private async Task DeclareQueuesAsync(
+        IChannel channel,
+        CancellationToken cancellationToken)
+        {
+            await channel.QueueDeclareAsync(
+                queue: _options.ProcessPaymentQueue,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: cancellationToken);
+
+            await channel.QueueDeclareAsync(
+                queue: _options.ProcessPaymentDeadLetterQueue,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: cancellationToken);
+        }
+
 
         public override async Task StopAsync(CancellationToken cancellationToken)
         {

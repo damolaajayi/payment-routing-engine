@@ -12,5 +12,9 @@ namespace PaymentRoutingEngine.Infrastructure.Messaging
         public string Password { get; init; } = "guest";
         public string VirtualHost { get; init; } = "/";
         public string ProcessPaymentQueue { get; init; } = "process-payment-queue";
+
+        public string ProcessPaymentDeadLetterQueue { get; init; } = "process-payment-dlq";
+
+        public int MaxProcessingRetries { get; init; } = 3;
     }
 }
