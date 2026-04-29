@@ -1,10 +1,9 @@
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using PaymentRoutingEngine.Api.Middlewares;
+using PaymentRoutingEngine.Api.HealthChecks;
 using PaymentRoutingEngine.Application.DependencyInjection;
 using PaymentRoutingEngine.Infrastructure.DependencyInjection;
-using PaymentRoutingEngine.Infrastructure.Messaging;
-using RabbitMQ.Client;
 using Serilog;
 using System.Threading.RateLimiting;
 
@@ -68,20 +67,7 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("Database")!)
-    .AddRabbitMQ((sp, options) =>
-    {
-        var rabbitMqOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RabbitMqOptions>>().Value;
-
-        options.ConnectionFactory = new ConnectionFactory
-        {
-            HostName = rabbitMqOptions.HostName,
-            Port = rabbitMqOptions.Port,
-            UserName = rabbitMqOptions.UserName,
-            Password = rabbitMqOptions.Password,
-            VirtualHost = rabbitMqOptions.VirtualHost,
-            RequestedConnectionTimeout = TimeSpan.FromSeconds(5)
-        };
-    });
+    .AddCheck<RabbitMqConnectionHealthCheck>("rabbitmq");
 builder.Host.UseSerilog((context, loggerConfiguration) =>
 {
     loggerConfiguration

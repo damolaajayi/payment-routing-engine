@@ -245,14 +245,37 @@ It demonstrates:
 
 ## Local Development
 
-Detailed setup instructions will be added as the project evolves.
+Do not store secrets or real connection strings in `appsettings.json`.
 
-Planned local environment:
-- API service
-- PostgreSQL
-- RabbitMQ
-- observability tooling
-- mock provider simulator(s)
+Use one of these instead:
+
+- Docker Compose: create a local `.env` from `.env.example` and fill in `POSTGRES_*` and Paystack values.
+- API local runs: use .NET user secrets or environment variables for `ConnectionStrings__Database`.
+- Worker local runs: use its existing user-secrets support or environment variables for `ConnectionStrings__Database`.
+
+Example API user-secrets setup:
+
+```bash
+cd src/PaymentRoutingEngine.Api
+dotnet user-secrets set "ConnectionStrings:Database" "Host=localhost;Port=5432;Database=payment_routing_engine;Username=postgres;Password=change_me"
+dotnet user-secrets set "Paystack:SecretKey" "your_real_test_key"
+dotnet user-secrets set "Paystack:WebhookSecret" "your_real_webhook_secret"
+```
+
+Example worker user-secrets setup:
+
+```bash
+cd src/PaymentRoutingEngine.Workers
+dotnet user-secrets set "ConnectionStrings:Database" "Host=localhost;Port=5432;Database=payment_routing_engine;Username=postgres;Password=change_me"
+dotnet user-secrets set "Paystack:SecretKey" "your_real_test_key"
+dotnet user-secrets set "Paystack:WebhookSecret" "your_real_webhook_secret"
+```
+
+Equivalent environment variable:
+
+```bash
+ConnectionStrings__Database=Host=localhost;Port=5432;Database=payment_routing_engine;Username=postgres;Password=change_me
+```
 
 ---
 
