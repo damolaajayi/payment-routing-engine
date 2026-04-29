@@ -3,6 +3,8 @@ using OpenTelemetry.Trace;
 using PaymentRoutingEngine.Api.Middlewares;
 using PaymentRoutingEngine.Application.DependencyInjection;
 using PaymentRoutingEngine.Infrastructure.DependencyInjection;
+using PaymentRoutingEngine.Infrastructure.Messaging;
+using RabbitMQ.Client;
 using Serilog;
 using System.Threading.RateLimiting;
 
@@ -64,6 +66,22 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
     };
 });
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("Database")!)
+    .AddRabbitMQ((sp, options) =>
+    {
+        var rabbitMqOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RabbitMqOptions>>().Value;
+
+        options.ConnectionFactory = new ConnectionFactory
+        {
+            HostName = rabbitMqOptions.HostName,
+            Port = rabbitMqOptions.Port,
+            UserName = rabbitMqOptions.UserName,
+            Password = rabbitMqOptions.Password,
+            VirtualHost = rabbitMqOptions.VirtualHost,
+            RequestedConnectionTimeout = TimeSpan.FromSeconds(5)
+        };
+    });
 builder.Host.UseSerilog((context, loggerConfiguration) =>
 {
     loggerConfiguration
@@ -72,13 +90,6 @@ builder.Host.UseSerilog((context, loggerConfiguration) =>
         .Enrich.WithCorrelationId()
         .WriteTo.Console();
 });
-
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource =>
@@ -110,4 +121,7 @@ app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.MapControllers();
 
+
+app.MapHealthChecks("/health");
 app.Run();
+

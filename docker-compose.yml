@@ -1,4 +1,57 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: src/PaymentRoutingEngine.Api/Dockerfile
+    container_name: payment-routing-engine-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=payment_routing_engine;Username=postgres;Password=postgres
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__UserName: guest
+      RabbitMQ__Password: guest
+      RabbitMQ__VirtualHost: /
+      RabbitMQ__ProcessPaymentQueue: process-payment-queue
+      RabbitMQ__ProcessPaymentDeadLetterQueue: process-payment-dlq
+      RabbitMQ__MaxProcessingRetries: 3
+      Paystack__SecretKey: ${PAYSTACK_SECRET_KEY}
+      Paystack__WebhookSecret: ${PAYSTACK_WEBHOOK_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/PaymentRoutingEngine.Workers/Dockerfile
+    container_name: payment-routing-engine-worker
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=payment_routing_engine;Username=postgres;Password=postgres
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__UserName: guest
+      RabbitMQ__Password: guest
+      RabbitMQ__VirtualHost: /
+      RabbitMQ__ProcessPaymentQueue: process-payment-queue
+      RabbitMQ__ProcessPaymentDeadLetterQueue: process-payment-dlq
+      RabbitMQ__MaxProcessingRetries: 3
+      Paystack__SecretKey: ${PAYSTACK_SECRET_KEY}
+      Paystack__WebhookSecret: ${PAYSTACK_WEBHOOK_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   postgres:
     image: postgres:16
     container_name: payment-routing-engine-postgres
@@ -11,6 +64,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_routing_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   rabbitmq:
     image: rabbitmq:3-management
     container_name: payment-routing-engine-rabbitmq
@@ -21,6 +80,11 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
