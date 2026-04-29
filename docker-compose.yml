@@ -10,7 +10,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Database: Host=postgres;Port=5432;Database=payment_routing_engine;Username=postgres;Password=postgres
+      ConnectionStrings__Database: ${DB_CONNECTION_STRING}
       RabbitMQ__HostName: rabbitmq
       RabbitMQ__Port: 5672
       RabbitMQ__UserName: guest
@@ -57,9 +57,9 @@ services:
     container_name: payment-routing-engine-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: payment_routing_engine
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
